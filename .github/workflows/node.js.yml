@@ -9,7 +9,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ETAPA 1: SONARCLOUD
+  # ETAPA 1: SONARCLOUD (Calidad)
   sonarqube:
     name: 🔍 SonarCloud Analysis
     runs-on: ubuntu-latest
@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (CON ARRANQUE DIRECTO PARA EVITAR MODULE_NOT_FOUND)
+  # ETAPA 2: K6 (Rendimiento)
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -67,8 +67,12 @@ jobs:
       - name: Start application
         run: |
           cd fast-api-dev
-          # Iniciamos directamente con node app.js para saltar el error de bin/www
-          node app.js & 
+          # Listamos archivos para depurar si hay errores de ruta
+          echo "Estructura de archivos:"
+          ls -R
+          
+          # Iniciamos con el comando estándar pero desde la carpeta correcta
+          npm start &
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
@@ -76,10 +80,10 @@ jobs:
               echo "✅ App lista y respondiendo"
               break
             fi
-            echo "Intento $i/20: La app está cargando módulos..."
+            echo "Intento $i/20: Esperando respuesta de la API..."
             sleep 3
             if [ $i -eq 20 ]; then
-              echo "❌ ERROR: La app no inició. Asegúrate que el archivo se llame app.js"
+              echo "❌ ERROR: La app no inició. Revisa el log de arriba (ls -R)."
               exit 1
             fi
           done
@@ -92,7 +96,7 @@ jobs:
       - name: Run K6 Load Test
         run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
-  # ETAPA 3: DOCKER
+  # ETAPA 3: DOCKER (Empaquetado)
   build-and-push:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -116,7 +120,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  # ETAPA 4: DEPLOY
+  # ETAPA 4: DEPLOY (Servidor Real)
   deploy:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
