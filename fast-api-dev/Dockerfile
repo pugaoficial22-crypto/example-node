@@ -2,20 +2,20 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copiar dependencias primero (cache de Docker)
+# Copiar archivos de dependencias
 COPY package*.json ./
+
+# Instalar solo producción
 RUN npm ci --only=production --legacy-peer-deps
 
-# Copiar el resto del código
-COPY app.js ./
+# Copiar carpetas del código (Esto ya incluye src y bin)
+COPY bin/ ./bin/
+COPY src/ ./src/
 COPY routes/ ./routes/
-COPY src/    ./src/
-COPY lib/    ./lib/
 COPY public/ ./public/
-COPY bin/    ./bin/
 
+# Exponer puerto
 EXPOSE 3000
 
-USER node
-
-CMD ["node", "bin/www"]
+# Comando de inicio
+CMD ["npm", "start"]
