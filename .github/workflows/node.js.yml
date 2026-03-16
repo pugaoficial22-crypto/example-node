@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (Aquí estaba el fallo de MODULE_NOT_FOUND)
+  # ETAPA 2: K6 (CON ARRANQUE DIRECTO PARA EVITAR MODULE_NOT_FOUND)
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -66,9 +66,9 @@ jobs:
 
       - name: Start application
         run: |
-          # Entramos a la carpeta y lanzamos el inicio de forma absoluta
           cd fast-api-dev
-          npm start &
+          # Iniciamos directamente con node app.js para saltar el error de bin/www
+          node app.js & 
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
@@ -76,10 +76,10 @@ jobs:
               echo "✅ App lista y respondiendo"
               break
             fi
-            echo "Intento $i/20: Esperando respuesta..."
+            echo "Intento $i/20: La app está cargando módulos..."
             sleep 3
             if [ $i -eq 20 ]; then
-              echo "❌ La app nunca arrancó (Revisa MODULE_NOT_FOUND)"
+              echo "❌ ERROR: La app no inició. Asegúrate que el archivo se llame app.js"
               exit 1
             fi
           done
