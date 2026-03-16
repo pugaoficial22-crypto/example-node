@@ -9,7 +9,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ETAPA 1: SONARCLOUD (Calidad)
+  # ETAPA 1: SONARCLOUD
   sonarqube:
     name: 🔍 SonarCloud Analysis
     runs-on: ubuntu-latest
@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (Rendimiento)
+  # ETAPA 2: K6
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -67,14 +67,22 @@ jobs:
       - name: Start application
         run: |
           npm start &
-          echo "Esperando app..."
+          echo "Esperando app en puerto 3000..."
+          # Damos hasta 60 segundos (20 intentos x 3 segundos) para que la app responda
           for i in {1..20}; do
-            curl -sf http://localhost:3000/health && (echo "✅ Lista" && break)
+            if curl -sf http://localhost:3000/health; then
+              echo "✅ App lista y respondiendo"
+              break
+            fi
+            echo "Intento $i/20: Esperando respuesta de la API..."
             sleep 3
+            if [ $i -eq 20 ]; then
+              echo "❌ La app nunca arrancó"
+              exit 1
+            fi
           done
         working-directory: fast-api-dev
 
-      # INSTALACIÓN ULTRA SIMPLE DE K6 (Sin GPG problemático)
       - name: Install K6
         run: |
           curl -L https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz | tar -xz
@@ -83,7 +91,7 @@ jobs:
       - name: Run K6 Load Test
         run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
-  # ETAPA 3: DOCKER (Empaquetado)
+  # ETAPA 3: DOCKER
   build-and-push:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -107,7 +115,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  # ETAPA 4: DEPLOY (Servidor Real)
+  # ETAPA 4: DEPLOY
   deploy:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
@@ -128,5 +136,5 @@ jobs:
             docker stop fast-api-dev || true
             docker rm fast-api-dev || true
             docker run -d --name fast-api-dev -p 8080:3000 --restart always ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            sleep 5
+            sleep 10
             curl -sf http://localhost:8080/health && echo "✅ DEPLOY EXITOSO" || (echo "❌ FALLÓ" && exit 1)
