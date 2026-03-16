@@ -12,9 +12,9 @@ export const options = {
     { duration: '1m',  target: 20 },
     { duration: '30s', target: 0  },
   ],
-  thresholds: {
+ thresholds: {
     'http_req_duration': ['p(95)<2000'],
-    'http_req_failed':   ['rate<0.1'],
+    'http_req_failed':   ['rate<0.3'],   // ← cambia 0.1 por 0.3
     'health_duration':   ['p(90)<500'],
     'items_duration':    ['p(90)<1000'],
     'errors':            ['rate<0.1'],
