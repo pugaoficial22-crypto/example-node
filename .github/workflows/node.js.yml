@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (CON DOBLE VERIFICACIÓN DE PUERTO)
+  # ETAPA 2: K6 (USANDO NPM START Y CAPTURANDO LOGS)
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -67,12 +67,12 @@ jobs:
       - name: Start application
         run: |
           cd fast-api-dev
-          # Arrancamos y redirigimos la salida a un log para ver errores si falla
-          node src/app.js > app.log 2>&1 & 
+          # Forzamos el puerto 3000 y lanzamos con npm start
+          PORT=3000 npm start > app.log 2>&1 &
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
-            # Intentamos /health y si falla intentamos / (raíz)
+            # Probamos /health, / y el puerto directamente
             if curl -sf http://localhost:3000/health || curl -sf http://localhost:3000/; then
               echo "✅ App lista y respondiendo"
               break
@@ -80,8 +80,8 @@ jobs:
             echo "Intento $i/20: La app no responde aún..."
             sleep 3
             if [ $i -eq 20 ]; then
-              echo "❌ ERROR: La app no respondió en puerto 3000."
-              echo "--- ULTIMOS LOGS DE LA APP ---"
+              echo "❌ ERROR: La app no respondió."
+              echo "--- LOGS DE LA APP (AQUÍ ESTÁ EL ERROR REAL) ---"
               cat app.log
               exit 1
             fi
@@ -93,9 +93,7 @@ jobs:
           sudo mv k6-v0.49.0-linux-amd64/k6 /usr/local/bin/
 
       - name: Run K6 Load Test
-        run: |
-          # Si no existe /health, el test de K6 debe apuntar a /
-          k6 run --env BASE_URL=http://localhost:3000 load_test.js
+        run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
   # ETAPA 3: DOCKER
   build-and-push:
@@ -143,5 +141,4 @@ jobs:
             docker rm fast-api-dev || true
             docker run -d --name fast-api-dev -p 8080:3000 --restart always ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             sleep 10
-            # Doble verificación también en el deploy
             (curl -sf http://localhost:8080/health || curl -sf http://localhost:8080/) && echo "✅ DEPLOY EXITOSO" || (echo "❌ FALLÓ" && exit 1)
