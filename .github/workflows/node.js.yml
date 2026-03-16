@@ -45,7 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 PERFORMANCE
+  # ETAPA 2: K6 PERFORMANCE (CORRECCIÓN CRÍTICA DE RUTA)
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -66,16 +66,17 @@ jobs:
       - name: Start application
         run: |
           cd fast-api-dev
-          PORT=3000 npm start > app.log 2>&1 &
+          # Forzamos el arranque directo desde src para evitar el error de bin/www
+          PORT=3000 node src/app.js > app.log 2>&1 &
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
-            # Probamos raíz o health
+            # Verificamos raíz o health
             if curl -sf http://localhost:3000/ || curl -sf http://localhost:3000/health; then
-              echo "✅ App lista"
+              echo "✅ App lista en puerto 3000"
               break
             fi
-            echo "Intento $i/20: Esperando..."
+            echo "Intento $i/20: Esperando respuesta..."
             sleep 3
             if [ $i -eq 20 ]; then
               echo "❌ ERROR: Logs de la app:"
@@ -92,7 +93,7 @@ jobs:
       - name: Run K6 Load Test
         run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
-  # ETAPA 3: DOCKER (CORREGIDO)
+  # ETAPA 3: DOCKER
   build-and-push:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -114,10 +115,9 @@ jobs:
         with:
           context: fast-api-dev
           push: true
-          # Sintaxis corregida sin los dos puntos dentro de las llaves
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  # ETAPA 4: DEPLOY (CORREGIDO)
+  # ETAPA 4: DEPLOY
   deploy:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
@@ -134,7 +134,6 @@ jobs:
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # Corregido: Tags fuera de las llaves de expresión
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             docker stop fast-api-dev || true
             docker rm fast-api-dev || true
