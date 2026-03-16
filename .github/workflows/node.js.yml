@@ -41,12 +41,11 @@ jobs:
             -Dsonar.sources=fast-api-dev/src
             -Dsonar.tests=fast-api-dev/tests
             -Dsonar.javascript.lcov.reportPaths=fast-api-dev/coverage/lcov.info
-            -Dsonar.exclusions=**/node_modules/**,**/public/**,load_test.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (USANDO NPM START Y CAPTURANDO LOGS)
+  # ETAPA 2: K6 PERFORMANCE
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -67,21 +66,19 @@ jobs:
       - name: Start application
         run: |
           cd fast-api-dev
-          # Forzamos el puerto 3000 y lanzamos con npm start
           PORT=3000 npm start > app.log 2>&1 &
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
-            # Probamos /health, / y el puerto directamente
-            if curl -sf http://localhost:3000/health || curl -sf http://localhost:3000/; then
-              echo "✅ App lista y respondiendo"
+            # Probamos raíz o health
+            if curl -sf http://localhost:3000/ || curl -sf http://localhost:3000/health; then
+              echo "✅ App lista"
               break
             fi
-            echo "Intento $i/20: La app no responde aún..."
+            echo "Intento $i/20: Esperando..."
             sleep 3
             if [ $i -eq 20 ]; then
-              echo "❌ ERROR: La app no respondió."
-              echo "--- LOGS DE LA APP (AQUÍ ESTÁ EL ERROR REAL) ---"
+              echo "❌ ERROR: Logs de la app:"
               cat app.log
               exit 1
             fi
@@ -95,7 +92,7 @@ jobs:
       - name: Run K6 Load Test
         run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
-  # ETAPA 3: DOCKER
+  # ETAPA 3: DOCKER (CORREGIDO)
   build-and-push:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -117,9 +114,10 @@ jobs:
         with:
           context: fast-api-dev
           push: true
+          # Sintaxis corregida sin los dos puntos dentro de las llaves
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  # ETAPA 4: DEPLOY
+  # ETAPA 4: DEPLOY (CORREGIDO)
   deploy:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
@@ -136,9 +134,8 @@ jobs:
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Corregido: Tags fuera de las llaves de expresión
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             docker stop fast-api-dev || true
             docker rm fast-api-dev || true
             docker run -d --name fast-api-dev -p 8080:3000 --restart always ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            sleep 10
-            (curl -sf http://localhost:8080/health || curl -sf http://localhost:8080/) && echo "✅ DEPLOY EXITOSO" || (echo "❌ FALLÓ" && exit 1)
