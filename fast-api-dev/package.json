@@ -4,10 +4,20 @@
   "private": true,
   "scripts": {
     "start": "node ./bin/www",
-    "test": "jest --verbose",
+    "test": "jest --verbose --coverage --coverageReporters=lcov --coverageReporters=text",
     "format": "prettier --write .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "routes/**/*.js",
+      "app.js",
+      "lib/**/*.js"
+    ],
+    "coverageDirectory": "coverage"
   },
   "dependencies": {
     "cookie-parser": "~1.4.4",
