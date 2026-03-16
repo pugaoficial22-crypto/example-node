@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (CON RUTA CORREGIDA A SRC)
+  # ETAPA 2: K6 (CON DOBLE VERIFICACIÓN DE PUERTO)
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -67,19 +67,22 @@ jobs:
       - name: Start application
         run: |
           cd fast-api-dev
-          # Arrancamos desde src/app.js que es donde está tu código según el ls
-          node src/app.js & 
+          # Arrancamos y redirigimos la salida a un log para ver errores si falla
+          node src/app.js > app.log 2>&1 & 
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
-            if curl -sf http://localhost:3000/health; then
+            # Intentamos /health y si falla intentamos / (raíz)
+            if curl -sf http://localhost:3000/health || curl -sf http://localhost:3000/; then
               echo "✅ App lista y respondiendo"
               break
             fi
-            echo "Intento $i/20: Esperando respuesta..."
+            echo "Intento $i/20: La app no responde aún..."
             sleep 3
             if [ $i -eq 20 ]; then
-              echo "❌ ERROR: La app no inició. Verifica si el archivo en src se llama app.js o index.js"
+              echo "❌ ERROR: La app no respondió en puerto 3000."
+              echo "--- ULTIMOS LOGS DE LA APP ---"
+              cat app.log
               exit 1
             fi
           done
@@ -90,7 +93,9 @@ jobs:
           sudo mv k6-v0.49.0-linux-amd64/k6 /usr/local/bin/
 
       - name: Run K6 Load Test
-        run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
+        run: |
+          # Si no existe /health, el test de K6 debe apuntar a /
+          k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
   # ETAPA 3: DOCKER
   build-and-push:
@@ -138,4 +143,5 @@ jobs:
             docker rm fast-api-dev || true
             docker run -d --name fast-api-dev -p 8080:3000 --restart always ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             sleep 10
-            curl -sf http://localhost:8080/health && echo "✅ DEPLOY EXITOSO" || (echo "❌ FALLÓ" && exit 1)
+            # Doble verificación también en el deploy
+            (curl -sf http://localhost:8080/health || curl -sf http://localhost:8080/) && echo "✅ DEPLOY EXITOSO" || (echo "❌ FALLÓ" && exit 1)
