@@ -4,7 +4,8 @@
  * Module dependencies.
  */
 
-var app = require('../app')
+// CORRECCIÓN AQUÍ: Apuntamos a la carpeta src donde está tu app.js real
+var app = require('../src/app')
 var debug = require('debug')('fast-api-dev:server')
 var http = require('http')
 
