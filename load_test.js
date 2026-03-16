@@ -75,7 +75,9 @@ export default function () {
     sleep(1);
 
     // GET /items/999 — item inexistente, debe devolver 404
-    const notFoundRes = http.get(`${BASE_URL}/items/999`);
+    const notFoundRes = http.get(`${BASE_URL}/items/999`, {
+      tags: { expected_response: 'false' },
+    });
     const notFoundOk = check(notFoundRes, {
       'items/999: status 404':  (r) => r.status === 404,
     });
