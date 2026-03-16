@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Copiar dependencias primero (cache de Docker)
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --only=production --legacy-peer-deps
 
 # Copiar el resto del código
 COPY app.js ./
