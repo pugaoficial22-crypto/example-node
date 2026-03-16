@@ -9,7 +9,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ETAPA 1: SONARCLOUD (Calidad)
+  # ETAPA 1: SONARCLOUD
   sonarqube:
     name: 🔍 SonarCloud Analysis
     runs-on: ubuntu-latest
@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 (Rendimiento)
+  # ETAPA 2: K6 (CON RUTA CORREGIDA A SRC)
   k6-load-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
@@ -67,12 +67,8 @@ jobs:
       - name: Start application
         run: |
           cd fast-api-dev
-          # Listamos archivos para depurar si hay errores de ruta
-          echo "Estructura de archivos:"
-          ls -R
-          
-          # Iniciamos con el comando estándar pero desde la carpeta correcta
-          npm start &
+          # Arrancamos desde src/app.js que es donde está tu código según el ls
+          node src/app.js & 
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
@@ -80,10 +76,10 @@ jobs:
               echo "✅ App lista y respondiendo"
               break
             fi
-            echo "Intento $i/20: Esperando respuesta de la API..."
+            echo "Intento $i/20: Esperando respuesta..."
             sleep 3
             if [ $i -eq 20 ]; then
-              echo "❌ ERROR: La app no inició. Revisa el log de arriba (ls -R)."
+              echo "❌ ERROR: La app no inició. Verifica si el archivo en src se llama app.js o index.js"
               exit 1
             fi
           done
@@ -96,7 +92,7 @@ jobs:
       - name: Run K6 Load Test
         run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
-  # ETAPA 3: DOCKER (Empaquetado)
+  # ETAPA 3: DOCKER
   build-and-push:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -120,7 +116,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  # ETAPA 4: DEPLOY (Servidor Real)
+  # ETAPA 4: DEPLOY
   deploy:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
