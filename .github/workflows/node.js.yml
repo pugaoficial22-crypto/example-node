@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: fast-api-dev/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run tests with coverage
         run: npm test -- --coverage --coverageReporters=lcov
@@ -73,7 +73,7 @@ jobs:
           cache-dependency-path: fast-api-dev/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Start application
         run: |
