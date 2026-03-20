@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('node:path'); 
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
-const client = require('prom-client'); // <--- Cliente de Prometheus
+const client = require('prom-client');
 
 const indexRouter = require('../routes/index');
 const usersRouter = require('../routes/users');
@@ -10,8 +10,7 @@ const itemsRouter = require('../routes/items');
 
 const app = express();
 
-// --- CONFIGURACIÓN DE MÉTRICAS ---
-client.collectDefaultMetrics(); // Métricas de CPU/RAM del contenedor
+client.collectDefaultMetrics();
 
 const httpRequestCounter = new client.Counter({
   name: 'http_requests_total',
@@ -24,7 +23,6 @@ const activeUsersGauge = new client.Gauge({
     help: 'Número actual de usuarios activos simulados'
 });
 
-// Middleware para contar cada visita a tus rutas
 app.use((req, res, next) => {
   res.on('finish', () => {
     httpRequestCounter.inc({
@@ -36,22 +34,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- CORRECCIÓN: Solo activa el simulador si NO estamos haciendo pruebas ---
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => {
     activeUsersGauge.set(Math.floor(Math.random() * 50) + 10);
   }, 5000);
 }
-// ---------------------------------
 
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-
 app.use(express.static(path.join(__dirname, '../public')));
 
-// RUTA PARA PROMETHEUS
 app.get('/metrics', async (req, res) => {
   res.set('Content-Type', client.register.contentType);
   res.send(await client.register.metrics());
