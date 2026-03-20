@@ -36,10 +36,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Simulador de usuarios para que veas datos en Grafana de inmediato
-setInterval(() => {
-  activeUsersGauge.set(Math.floor(Math.random() * 50) + 10);
-}, 5000);
+// --- CORRECCIÓN: Solo activa el simulador si NO estamos haciendo pruebas ---
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    activeUsersGauge.set(Math.floor(Math.random() * 50) + 10);
+  }, 5000);
+}
 // ---------------------------------
 
 app.use(logger('dev'));
@@ -62,5 +64,5 @@ app.use('/items', itemsRouter);
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK' });
 });
-
+     
 module.exports = app;
