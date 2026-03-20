@@ -4,8 +4,9 @@ global:
 scrape_configs:
   - job_name: 'servidor'
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ['localhost:9100']
 
   - job_name: 'aplicacion_nodejs'
+    metrics_path: '/metrics'
     static_configs:
-      - targets: ['app-node:3000']
+      - targets: ['localhost:3000']
