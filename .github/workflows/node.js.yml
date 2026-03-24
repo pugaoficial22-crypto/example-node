@@ -24,20 +24,13 @@ jobs:
         with:
           node-version: '20'
 
-      # 🔥 CACHE (más rápido y estable)
-      - name: Cache node modules
-        uses: actions/cache@v4
-        with:
-          path: fast-api-dev/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('fast-api-dev/package-lock.json') }}
-
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-        working-directory: fast-api-dev
+        working-directory: fast-api-dev/fast-api-dev
 
       - name: Run tests with coverage
         run: npm test -- --coverage --coverageReporters=lcov
-        working-directory: fast-api-dev
+        working-directory: fast-api-dev/fast-api-dev
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v2
@@ -45,9 +38,9 @@ jobs:
           args: >
             -Dsonar.organization=pugaoficial22-crypto
             -Dsonar.projectKey=pugaoficial22-crypto_example-node
-            -Dsonar.sources=fast-api-dev/src
-            -Dsonar.tests=fast-api-dev/tests
-            -Dsonar.javascript.lcov.reportPaths=fast-api-dev/coverage/lcov.info
+            -Dsonar.sources=fast-api-dev/fast-api-dev/src
+            -Dsonar.tests=fast-api-dev/fast-api-dev/tests
+            -Dsonar.javascript.lcov.reportPaths=fast-api-dev/fast-api-dev/coverage/lcov.info
             -Dsonar.qualitygate.wait=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,26 +62,20 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-        working-directory: fast-api-dev
+        working-directory: fast-api-dev/fast-api-dev
 
       - name: Start application
         run: |
-          cd fast-api-dev
+          cd fast-api-dev/fast-api-dev
           PORT=3000 npm start > app.log 2>&1 &
           
           echo "Esperando app en puerto 3000..."
           for i in {1..20}; do
-            if curl -sf http://localhost:3000/ || curl -sf http://localhost:3000/health; then
+            if curl -sf http://localhost:3000/health; then
               echo "✅ App lista en puerto 3000"
               break
             fi
-            echo "Intento $i/20..."
             sleep 3
-            if [ $i -eq 20 ]; then
-              echo "❌ ERROR: Logs de la app:"
-              cat app.log
-              exit 1
-            fi
           done
 
       - name: Install K6
@@ -96,9 +83,9 @@ jobs:
           curl -L https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz | tar -xz
           sudo mv k6-v0.49.0-linux-amd64/k6 /usr/local/bin/
 
-      # 🔥 CORREGIDO: ruta correcta del script
       - name: Run K6 Load Test
-        run: k6 run --env BASE_URL=http://localhost:3000 fast-api-dev/load_test.js
+        # RUTA CORREGIDA: fast-api-dev/fast-api-dev/load_test.js
+        run: k6 run --env BASE_URL=http://localhost:3000 fast-api-dev/fast-api-dev/load_test.js
 
   # ETAPA 3: DOCKER
   build-and-push:
@@ -122,7 +109,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: fast-api-dev
+          context: fast-api-dev/fast-api-dev
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest

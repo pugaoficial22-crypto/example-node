@@ -5,15 +5,15 @@ export const options = {
   vus: 10,
   duration: '30s',
   thresholds: {
-    'http_req_duration': ['p(95)<3000'],
-    'http_req_failed': ['rate<0.5'],
+    'http_req_duration': ['p(95)<3000'], // 95% de peticiones debajo de 3s
+    'http_req_failed': ['rate<0.5'],      // Menos del 50% de errores
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-
 export default function () {
-  // Solo pedimos el health check para validar que la app está viva
+  const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
+  
+  // Validamos el endpoint de salud
   const res = http.get(`${BASE_URL}/health`);
   
   check(res, {
