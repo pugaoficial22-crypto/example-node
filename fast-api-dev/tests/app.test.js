@@ -86,4 +86,20 @@ describe('Suite de Pruebas de Calidad de Software', () => {
 
   });
 
+  // =========================
+  // ✅ SIMULACIÓN USUARIOS ACTIVOS
+  // =========================
+  describe('Simulación de usuarios activos', () => {
+
+    test('no debe correr en entorno de pruebas', () => {
+      expect(process.env.NODE_ENV).toBe('test');
+    });
+
+    test('app.js carga correctamente en modo test', () => {
+      const app = require('../src/app');
+      expect(app).toBeDefined();
+    });
+
+  });
+
 });
