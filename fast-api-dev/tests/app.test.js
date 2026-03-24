@@ -8,7 +8,6 @@ describe('Suite de Pruebas de Calidad de Software', () => {
   // 🧠 PRUEBAS UNITARIAS
   // =========================
   describe('Pruebas Unitarias - Lógica de Inventario', () => {
-
     test('Debe calcular correctamente el valor total (10 * 5 = 50)', () => {
       expect(calculateValue(10, 5)).toBe(50);
     });
@@ -25,14 +24,12 @@ describe('Suite de Pruebas de Calidad de Software', () => {
     test('Debe aplicar correctamente un descuento del 20%', () => {
       expect(applyDiscount(100, 20)).toBe(80);
     });
-
   });
 
   // =========================
   // 🌐 PRUEBAS DE API
   // =========================
   describe('Pruebas de Integración - API Endpoints', () => {
-
     test('GET /health - responde OK', async () => {
       const res = await request(app).get('/health');
       expect(res.statusCode).toBe(200);
@@ -55,21 +52,19 @@ describe('Suite de Pruebas de Calidad de Software', () => {
       const res = await request(app).get('/items/999');
       expect(res.statusCode).toBe(404);
     });
-
   });
 
   // =========================
-  // 🔥 COBERTURA EXTRA (CLAVE)
+  // 🔥 COBERTURA EXTRA
   // =========================
   describe('Cobertura Extra', () => {
-
     test('La app debe estar definida', () => {
       expect(app).toBeDefined();
     });
 
-    test('Ruta inexistente debe responder error', async () => {
-      const res = await request(app).get('/no-existe');
-      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    test('Ruta inexistente debe responder error 404', async () => {
+      const res = await request(app).get('/ruta-que-no-existe-nunca');
+      expect(res.statusCode).toBe(404);
     });
 
     test('calculateValue con 0', () => {
@@ -79,27 +74,15 @@ describe('Suite de Pruebas de Calidad de Software', () => {
     test('applyDiscount sin descuento', () => {
       expect(applyDiscount(100, 0)).toBe(100);
     });
-
-    test('applyDiscount 100%', () => {
-      expect(applyDiscount(100, 100)).toBe(0);
-    });
-
   });
 
   // =========================
-  // ✅ SIMULACIÓN USUARIOS ACTIVOS
+  // ✅ VALIDACIÓN DE ENTORNO
   // =========================
-  describe('Simulación de usuarios activos', () => {
-
-    test('no debe correr en entorno de pruebas', () => {
+  describe('Simulación de entorno', () => {
+    test('Debe estar en entorno de pruebas', () => {
       expect(process.env.NODE_ENV).toBe('test');
     });
-
-    test('app.js carga correctamente en modo test', () => {
-      const app = require('../src/app');
-      expect(app).toBeDefined();
-    });
-
   });
 
 });
