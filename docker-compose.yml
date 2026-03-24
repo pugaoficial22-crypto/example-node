@@ -2,8 +2,7 @@ version: '3.8'
 
 services:
   app-node:
-    # Ruta corregida para encontrar tu Dockerfile
-    build: ./fast-api-dev/fast-api-dev
+    build: ./fast-api-dev
     image: ghcr.io/${GITHUB_REPOSITORY}:latest
     container_name: app-node
     ports:
@@ -13,13 +12,8 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
     ports:
       - "9100:9100"
-    restart: always
 
   prometheus:
     image: prom/prometheus:latest
@@ -28,7 +22,6 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-    restart: always
 
   grafana:
     image: grafana/grafana:latest
@@ -37,6 +30,3 @@ services:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
-    restart: always
