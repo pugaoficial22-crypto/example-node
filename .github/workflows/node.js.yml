@@ -4,112 +4,100 @@ on:
   push:
     branches: ["main"]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
-  # ETAPA 1: SONARCLOUD (Calidad y Seguridad)
   sonarqube:
     name: 🔍 SonarCloud Analysis
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-        working-directory: fast-api-dev
-
-      - name: Run tests with coverage
-        run: npm test -- --coverage --coverageReporters=lcov
-        working-directory: fast-api-dev
-
-      - name: SonarCloud Scan
+      - name: Install & Test
+        run: |
+          cd fast-api-dev/fast-api-dev
+          npm ci --legacy-peer-deps
+          npm test -- --coverage --coverageReporters=lcov
+      - name: SonarScanner
         uses: SonarSource/sonarqube-scan-action@v2
         with:
           args: >
             -Dsonar.organization=pugaoficial22-crypto
             -Dsonar.projectKey=pugaoficial22-crypto_example-node
-            -Dsonar.sources=fast-api-dev/src
-            -Dsonar.tests=fast-api-dev/tests
-            -Dsonar.javascript.lcov.reportPaths=fast-api-dev/coverage/lcov.info
+            -Dsonar.sources=fast-api-dev/fast-api-dev/src
+            -Dsonar.tests=fast-api-dev/fast-api-dev/tests
+            -Dsonar.javascript.lcov.reportPaths=fast-api-dev/fast-api-dev/coverage/lcov.info
             -Dsonar.qualitygate.wait=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # ETAPA 2: K6 PERFORMANCE (Carga)
-  k6-load-test:
+  k6-test:
     name: ⚡ K6 Performance Test
     runs-on: ubuntu-latest
     needs: sonarqube
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-        working-directory: fast-api-dev
-
-      - name: Start application
+      - uses: actions/checkout@v4
+      - name: Run App & K6
         run: |
-          cd fast-api-dev
+          cd fast-api-dev/fast-api-dev
+          npm ci --legacy-peer-deps
           PORT=3000 npm start > app.log 2>&1 &
-          
-          echo "Esperando app en puerto 3000..."
-          for i in {1..20}; do
-            if curl -sf http://localhost:3000/health; then
-              echo "✅ App lista en puerto 3000"
-              break
-            fi
-            sleep 3
-          done
-
-      - name: Install K6
-        run: |
+          sleep 10
           curl -L https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz | tar -xz
           sudo mv k6-v0.49.0-linux-amd64/k6 /usr/local/bin/
+          k6 run --env BASE_URL=http://localhost:3000 load_test.js
 
-      - name: Run K6 Load Test
-        run: k6 run --env BASE_URL=http://localhost:3000 fast-api-dev/load_test.js
-
-  # ETAPA 3: DOCKER (Empaquetado)
   build-and-push:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: k6-load-test
+    needs: k6-test
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: fast-api-dev
+          context: fast-api-dev/fast-api-dev
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository }}:latest
+
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+      
+      # 1. Copiamos los archivos de configuración al servidor
+      - name: Copy Config Files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,prometheus.yml"
+          target: "~/fast-api-project"
+
+      # 2. Ejecutamos el despliegue por SSH
+      - name: SSH Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd ~/fast-api-project
+            docker-compose pull
+            docker-compose up -d --remove-orphans
