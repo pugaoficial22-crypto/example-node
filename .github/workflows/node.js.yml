@@ -33,7 +33,7 @@ jobs:
         working-directory: fast-api-dev
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarqube-scan-action@v2
         with:
           args: >
             -Dsonar.organization=pugaoficial22-crypto
@@ -41,6 +41,7 @@ jobs:
             -Dsonar.sources=fast-api-dev/src
             -Dsonar.tests=fast-api-dev/tests
             -Dsonar.javascript.lcov.reportPaths=fast-api-dev/coverage/lcov.info
+            -Dsonar.qualitygate.wait=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -102,12 +103,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
