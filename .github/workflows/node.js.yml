@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
-      - name: SSH Deploy
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -85,10 +85,11 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           timeout: 60s
+          # Agregamos esto para ver qué está pasando realmente
+          debug: true 
           script: |
-            # Forzar login y despliegue
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker pull ghcr.io/${{ github.repository }}:latest
-            docker stop fast-api-dev || true
-            docker rm fast-api-dev || true
-            docker run -d --name fast-api-dev -p 8080:3000 --restart always ghcr.io/${{ github.repository }}:latest
+            sudo docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            sudo docker pull ghcr.io/${{ github.repository }}:latest
+            sudo docker stop fast-api-dev || true
+            sudo docker rm fast-api-dev || true
+            sudo docker run -d --name fast-api-dev -p 8080:3000 --restart always ghcr.io/${{ github.repository }}:latest
