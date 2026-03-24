@@ -24,6 +24,13 @@ jobs:
         with:
           node-version: '20'
 
+      # 🔥 CACHE (más rápido y estable)
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: fast-api-dev/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('fast-api-dev/package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
         working-directory: fast-api-dev
@@ -75,7 +82,7 @@ jobs:
               echo "✅ App lista en puerto 3000"
               break
             fi
-            echo "Intento $i/20: Esperando respuesta..."
+            echo "Intento $i/20..."
             sleep 3
             if [ $i -eq 20 ]; then
               echo "❌ ERROR: Logs de la app:"
@@ -89,8 +96,9 @@ jobs:
           curl -L https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz | tar -xz
           sudo mv k6-v0.49.0-linux-amd64/k6 /usr/local/bin/
 
+      # 🔥 CORREGIDO: ruta correcta del script
       - name: Run K6 Load Test
-        run: k6 run --env BASE_URL=http://localhost:3000 load_test.js
+        run: k6 run --env BASE_URL=http://localhost:3000 fast-api-dev/load_test.js
 
   # ETAPA 3: DOCKER
   build-and-push:
@@ -116,7 +124,9 @@ jobs:
         with:
           context: fast-api-dev
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   # ETAPA 4: DEPLOY
   deploy:
@@ -127,12 +137,9 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 10.0.1.2
+          host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.SERVER_HOST }}
-          proxy_username: ${{ secrets.SERVER_USER }}
-          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
