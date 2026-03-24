@@ -55,7 +55,7 @@ describe('Suite de Pruebas de Calidad de Software', () => {
   });
 
   // =========================
-  // 🔥 COBERTURA EXTRA
+  // 🔥 COBERTURA EXTRA (MÉTRICAS Y ERRORES)
   // =========================
   describe('Cobertura Extra', () => {
     test('La app debe estar definida', () => {
@@ -67,12 +67,23 @@ describe('Suite de Pruebas de Calidad de Software', () => {
       expect(res.statusCode).toBe(404);
     });
 
+    // TEST CLAVE PARA EL ENDPOINT DE MÉTRICAS (Líneas 56-61 de app.js)
+    test('GET /metrics - debe retornar métricas de Prometheus', async () => {
+      const res = await request(app).get('/metrics');
+      expect(res.statusCode).toBe(200);
+      expect(res.text).toContain('http_requests_total');
+    });
+
     test('calculateValue con 0', () => {
       expect(calculateValue(0, 10)).toBe(0);
     });
 
     test('applyDiscount sin descuento', () => {
       expect(applyDiscount(100, 0)).toBe(100);
+    });
+
+    test('applyDiscount 100%', () => {
+      expect(applyDiscount(100, 100)).toBe(0);
     });
   });
 
@@ -82,6 +93,11 @@ describe('Suite de Pruebas de Calidad de Software', () => {
   describe('Simulación de entorno', () => {
     test('Debe estar en entorno de pruebas', () => {
       expect(process.env.NODE_ENV).toBe('test');
+    });
+    
+    test('app.js carga correctamente en modo test', () => {
+      const appRef = require('../src/app');
+      expect(appRef).toBeDefined();
     });
   });
 
