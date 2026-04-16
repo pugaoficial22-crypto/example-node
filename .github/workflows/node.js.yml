@@ -96,5 +96,5 @@ jobs:
             docker run -d --name fast-api-dev -p 8080:3000 --restart always ghcr.io/${{ github.repository }}:latest
             
             # 3. Lógica de Orquestación Blue-Green (Actividad 3)
-            # Este script maneja la persistencia y el cambio de tráfico en Nginx
+            # Este script maneja la persistencia y el cambio de tráfico en NG
             /home/g2023171060/pipeline_deploy.sh
