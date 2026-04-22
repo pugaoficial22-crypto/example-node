@@ -1,26 +1,72 @@
 name: CI/CD Pipeline - Fast API Dev
 
+# Se dispara cada vez que haces push a main
+# o sea, cada que subo cambios al repo
 on:
   push:
     branches: ["main"]
 
 jobs:
+  # ══════════════════════════════════════════
+  # JOB 1: Analisis de codigo con SonarCloud
+  # Este job corre primero que todo
+  # Si falla aqui, los demas jobs no corren
+  # ══════════════════════════════════════════
   sonarqube:
-    name: 🔍 SonarCloud Analysis
+    name: "🔍 SonarCloud Analysis"
+    # Estoy usando una maquina virtual Ubuntu de GitHub
     runs-on: ubuntu-latest
     steps:
+      # Aqui bajo el codigo del repo a la maquina virtual
+      # fetch-depth: 0 baja TODO el historial de commits
+      # SonarCloud lo necesita para analizar bien el codigo
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Instalo Node.js version 20 en la maquina virtual
+      # Mi app necesita Node para correr
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install & Test
+
+      # Instalo las dependencias del proyecto
+      # Despues npm ci usa el package-lock.json para instalar exactamente las versiones que se usaron
+      # --legacy-peer-deps evita errores de compatibilidad 
+      - name: "📦 Instalar dependencias"
         run: |
           cd fast-api-dev
           npm ci --legacy-peer-deps
-          npm test -- --coverage --coverageReporters=lcov
-      - name: SonarScanner
+
+      # Corro los tests de Jest y Supertest
+      # --coverage genera el reporte de cobertura
+      # --coverageReporters=lcov lo guarda en formato lcov
+      # --coverageReporters=text muestra la tabla en consola
+      # --verbose muestra cada test con check o cruz segun pase o falle
+      - name: "🧪 Correr tests Jest + Supertest"
+        run: |
+          cd fast-api-dev
+          echo "================================"
+          echo "🧪 CORRIENDO TESTS"
+          echo "================================"
+          npm test -- \
+            --coverage \
+            --coverageReporters=lcov \
+            --coverageReporters=text \
+            --verbose
+          echo "================================"
+          echo "✅ TESTS TERMINADOS"
+          echo "================================"
+
+      # Mandamos el codigo a SonarCloud para analisis
+      # sonar.organization es tu organizacion en SonarCloud
+      # sonar.projectKey es el identificador de tu proyecto
+      # sonar.sources es donde se encuentra el codigo fuente
+      # sonar.tests es donde se encuentran los archivos de tests
+      # sonar.javascript.lcov.reportPaths es el reporte de cobertura que genere con Jest
+      # sonar.qualitygate.wait=true detiene el pipeline
+      # si el codigo no pasa los estandares de calidad 
+      - name: "🔍 SonarScanner"
         uses: SonarSource/sonarqube-scan-action@v2
         with:
           args: >
@@ -31,70 +77,334 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=fast-api-dev/coverage/lcov.info
             -Dsonar.qualitygate.wait=true
         env:
+          # GITHUB_TOKEN lo genera GitHub automaticamente
+          # SONAR_TOKEN es mi token de SonarCloud
+          # ambos estan guardados en los Secrets de mi repo
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+  # ══════════════════════════════════════════
+  # JOB 2: Pruebas de carga con K6
+  # Solo corre si el JOB 1 paso sin errores
+  # Construimos la imagen Docker y le pegamos 
+  # con K6 para ver como aguanta bajo carga
+  # ══════════════════════════════════════════
   k6-test:
-    name: ⚡ K6 Performance Test
+    name: "⚡ K6 Performance Test"
     runs-on: ubuntu-latest
+    # needs significa que espera a que sonarqube termine
+    # si sonarqube falla, este job no corre
     needs: sonarqube
     steps:
+      # Baje el codigo igual que en el job anterior
       - uses: actions/checkout@v4
-      - name: Run App & K6
+
+      # Construí la imagen Docker del proyecto
+      # ./fast-api-dev es la carpeta donde esta el Dockerfile
+      # -t fast-api-test es el nombre que le ponemos
+      # use esta imagen para probarla antes de subirla
+      - name: "🐳 Build imagen Docker para pruebas"
         run: |
-          cd fast-api-dev
-          npm ci --legacy-peer-deps
-          PORT=3000 npm start > app.log 2>&1 &
-          sleep 10
+          echo "================================"
+          echo "🐳 CONSTRUYENDO IMAGEN PARA K6"
+          echo "================================"
+          docker build -t fast-api-test ./fast-api-dev
+          echo "✅ Imagen construida"
+
+      # Levanté un contenedor con la imagen recien construida
+      # -d significa que corre en segundo plano
+      # -p 3000:3000 mapea el puerto de la maquina al contenedor
+      # le di 8 segundos para que la app arranque adentro
+      - name: "🟢 Levantar contenedor para pruebas"
+        run: |
+          docker run -d \
+            --name fast-api-test \
+            -p 3000:3000 \
+            fast-api-test
+          echo "⏳ Esperando que arranque..."
+          sleep 8
+          echo ""
+          echo "📦 Contenedor corriendo:"
+          docker ps --filter "name=fast-api-test" \
+            --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          echo ""
+          echo "📋 Logs del contenedor:"
+          docker logs fast-api-test --tail 10
+
+      # Descargamos K6 desde GitHub y lo instalamos
+      # luego le pegamos al contenedor que levantamos arriba
+      # en localhost:3000 que es donde esta corriendo
+      # si load_test.js no esta en fast-api-dev lo busca arriba en la raiz del repo
+      - name: "⚡ Correr K6 contra el contenedor"
+        run: |
+          echo "================================"
+          echo "⚡ INSTALANDO Y CORRIENDO K6"
+          echo "================================"
           curl -L https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz | tar -xz
           sudo mv k6-v0.49.0-linux-amd64/k6 /usr/local/bin/
-          k6 run --env BASE_URL=http://localhost:3000 load_test.js || k6 run --env BASE_URL=http://localhost:3000 ../load_test.js
+          k6 run --env BASE_URL=http://localhost:3000 \
+            fast-api-dev/load_test.js \
+            || k6 run --env BASE_URL=http://localhost:3000 \
+            load_test.js
+          echo "================================"
+          echo "✅ K6 TERMINO"
+          echo "================================"
 
+      # Borramos el contenedor de prueba siempre
+      # if: always() significa que corre aunque haya fallado
+      # asi no dejamos contenedores tirados en la maquina
+      - name: "🧹 Limpiar contenedor de prueba"
+        if: always()
+        run: |
+          docker stop fast-api-test || true
+          docker rm fast-api-test   || true
+          echo "✅ Contenedor de prueba eliminado"
+
+  # ══════════════════════════════════════════
+  # JOB 3: Construir y subir imagen a GHCR
+  # Solo corre si K6 paso sin errores
+  # Esta es la imagen oficial que va a mis vms de produccion
+  # ══════════════════════════════════════════
   build-and-push:
-    name: 🐳 Build & Push Docker Image
+    name: "🐳 Build & Push Docker Image"
     runs-on: ubuntu-latest
+    # Solo corre si k6-test paso
     needs: k6-test
     permissions:
+      # contents: read para leer el codigo del repo
+      # packages: write para subir la imagen a GHCR
       contents: read
       packages: write
     steps:
+      # Baje el codigo del repo
       - uses: actions/checkout@v4
-      - name: Log in to GHCR
+
+      # me autenticé en GitHub Container Registry
+      # ghcr.io es el registro de imagenes de GitHub
+      # github.actor es tu usuario de GitHub automaticamente
+      # GITHUB_TOKEN lo genera GitHub, no necesitas crearlo
+      - name: "🔐 Login en GHCR"
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
+
+      # Construí la imagen y la subi a GHCR
+      # context: fast-api-dev es donde esta el Dockerfile
+      # push: true la sube automaticamente despues de construir
+      # tags es el nombre completo con el que queda en GHCR
+      # github.repository es pugaoficial22-crypto/example-node
+      - name: "🐳 Build y Push"
         uses: docker/build-push-action@v5
         with:
           context: fast-api-dev
           push: true
           tags: ghcr.io/${{ github.repository }}:latest
 
+      # Mostre confirmacion de que la imagen se subio
+      # github.sha es el hash del commit que disparo el push
+      - name: "✅ Confirmar imagen subida"
+        run: |
+          echo "================================"
+          echo "✅ IMAGEN SUBIDA A GHCR"
+          echo "   ghcr.io/${{ github.repository }}:latest"
+          echo "   Commit : ${{ github.sha }}"
+          echo "   Fecha  : $(date)"
+          echo "================================"
+
+  # ══════════════════════════════════════════
+  # JOB 4: Deploy Blue-Green en produccion
+  # Solo corre si la imagen se subio bien
+  # Aqui es donde cambia de blue a green
+  # o de green a blue sin downtime para los usuarios
+  # ══════════════════════════════════════════
   deploy:
-    name: 🚀 Deploy to Production (Blue-Green Orchestration)
+    name: "🚀 Deploy Blue-Green"
     runs-on: ubuntu-latest
+    # Solo corre si build-and-push paso sin errores
     needs: build-and-push
     steps:
-      - name: Deploy via SSH
+      # Me conecte a la vpn-1 por SSH
+      # ahi es donde corren los contenedores Docker
+      # todo lo que esta en script: se ejecuta en vpn-1
+      # no en la maquina de GitHub
+      - name: "🐳 Deploy en vpn-1"
         uses: appleboy/ssh-action@v1.0.3
         with:
+          # secrets.SERVER_HOST es la IP de vpn-1
+          # secrets.SERVER_USER es el usuario SSH
+          # secrets.SSH_PRIVATE_KEY es tu llave privada SSH
           host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          # 120 segundos porque el deploy tarda un poco
+          timeout: 120s
+          script: |
+            echo "================================"
+            echo "🐳 DEPLOY BLUE-GREEN EN vpn-1"
+            echo "================================"
+
+            # La imagen que jalamos de GHCR
+            IMAGE="ghcr.io/pugaoficial22-crypto/example-node:latest"
+
+            # Nos autenticamos en GHCR desde vpn-1
+            # para poder jalar la imagen
+            docker login ghcr.io \
+              -u pugaoficial22-crypto \
+              -p ${{ secrets.GITHUB_TOKEN }}
+
+            # Preguntamos a Docker cual contenedor esta vivo
+            # docker ps lista los contenedores corriendo
+            # grep filtra solo los que se llaman fast-api-dev
+            # sed quita el prefijo fast-api-dev- para quedarnos
+            # solo con blue o green
+            # head -1 toma solo el primero por si hubiera dos
+            CURRENT=$(docker ps --format '{{.Names}}' \
+              | grep "fast-api-dev" \
+              | sed 's/fast-api-dev-//' \
+              | head -1)
+
+            # Si no hay ninguno corriendo empezamos en blue
+            [ -z "$CURRENT" ] && CURRENT="green"
+
+            # Dependiendo de cual esta activo, el siguiente es el otro
+            # si esta blue, el siguiente es green y viceversa
+            if [ "$CURRENT" = "blue" ]; then
+              NEXT="green"; NEXT_PORT=8081; CURRENT_PORT=8080
+            else
+              NEXT="blue";  NEXT_PORT=8080; CURRENT_PORT=8081
+            fi
+
+            # Mostramos como esta el servidor antes de tocar algo
+            echo ""
+            echo "📦 Como esta ANTES del deploy:"
+            docker ps --filter "name=fast-api-dev" \
+              --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            echo ""
+            echo "🎯 Activo ahorita : $CURRENT (puerto $CURRENT_PORT)"
+            echo "🚀 Vamos a subir  : $NEXT    (puerto $NEXT_PORT)"
+
+            # Jalamos la imagen nueva desde GHCR
+            # esto descarga la version mas reciente
+            echo ""
+            echo "📥 Jalando imagen nueva..."
+            docker pull $IMAGE
+
+            # Mostramos la imagen que se descargo
+            echo ""
+            echo "🔖 Imagen bajada:"
+            docker images ghcr.io/pugaoficial22-crypto/example-node \
+              --format "table {{.Tag}}\t{{.CreatedAt}}\t{{.Size}}"
+
+            # Borramos el contenedor destino si ya existia
+            # 2>/dev/null oculta el error si no existe
+            # || echo evita que el script falle si no existia
+            echo ""
+            echo "🗑️  Limpiando slot $NEXT por si existia..."
+            docker stop fast-api-dev-$NEXT 2>/dev/null \
+              && echo "  ✅ Detenido" || echo "  ℹ️  No corria"
+            docker rm fast-api-dev-$NEXT 2>/dev/null \
+              && echo "  ✅ Eliminado" || echo "  ℹ️  No existia"
+
+            # Levantamos el contenedor nuevo con docker run
+            # -d corre en segundo plano
+            # --name le pone el nombre blue o green segun toque
+            # -p mapea el puerto del servidor al contenedor
+            # --restart always lo reinicia si se cae
+            echo ""
+            echo "🟢 docker run fast-api-dev-$NEXT..."
+            docker run -d \
+              --name fast-api-dev-$NEXT \
+              -p $NEXT_PORT:3000 \
+              --restart always \
+              $IMAGE
+
+            # Esperamos a que la app arranque adentro del contenedor
+            echo "⏳ Esperando 8 segundos..."
+            sleep 8
+
+            # Vemos como quedo despues de levantar el nuevo
+            echo ""
+            echo "📦 Como quedo despues de levantar:"
+            docker ps --filter "name=fast-api-dev" \
+              --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            # Vemos los logs del contenedor para confirmar
+            # que la app arranco bien adentro
+            echo ""
+            echo "📋 Logs del contenedor nuevo:"
+            echo "--------------------------------------------------"
+            docker logs fast-api-dev-$NEXT --tail 15
+            echo "--------------------------------------------------"
+
+            # Checamos que el nuevo contenedor responda en /health
+            # curl -s no muestra progreso
+            # -o /dev/null descarta el body de la respuesta
+            # -w "%{http_code}" solo nos da el codigo HTTP
+            # si no responde 200 hacemos rollback automatico
+            echo ""
+            echo "🏥 Health check en localhost:$NEXT_PORT/health..."
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:$NEXT_PORT/health || echo "000")
+
+            if [ "$HTTP" != "200" ]; then
+              echo "❌ No respondio (HTTP $HTTP) - rollback..."
+              docker stop fast-api-dev-$NEXT
+              docker rm fast-api-dev-$NEXT
+              exit 1
+            fi
+            echo "✅ Respondio OK (HTTP $HTTP)"
+
+            # Ya que el nuevo esta sano, bajamos y borramos el viejo
+            # primero stop para detenerlo limpiamente
+            # luego rm para eliminarlo del sistema
+            echo ""
+            echo "🛑 Bajando el viejo fast-api-dev-$CURRENT..."
+            docker stop fast-api-dev-$CURRENT \
+              && echo "  ✅ Detenido"
+            docker rm fast-api-dev-$CURRENT \
+              && echo "  ✅ Eliminado"
+
+            # Borramos imagenes que ya no usa ningun contenedor
+            # -f fuerza sin pedir confirmacion
+            # esto libera espacio en el disco de vpn-1
+            echo ""
+            echo "🧹 Limpiando imagenes que ya no se usan..."
+            docker image prune -f
+            echo "  ✅ Listo"
+
+            # Guardamos cual color quedo activo
+            # switch_nginx.sh lo lee para saber a donde apuntar
+            echo "$NEXT" > /home/g2023171060/active_env
+
+            # Estado final - solo debe quedar UN contenedor
+            echo ""
+            echo "📦 Como quedo AL FINAL (debe haber solo UNO):"
+            docker ps --filter "name=fast-api-dev" \
+              --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            echo ""
+            echo "================================"
+            echo "🎉 DEPLOY LISTO EN vpn-1"
+            echo "   ❌ Se fue : fast-api-dev-$CURRENT"
+            echo "   ✅ Esta   : fast-api-dev-$NEXT"
+            echo "================================"
+
+      # Nos conectamos a nginx-externa por SSH
+      # y corremos switch_nginx.sh para que el trafico
+      # apunte al contenedor que acabamos de levantar
+      # switch_nginx.sh lee Docker en vpn-1 dinamicamente
+      - name: "🔀 Switch trafico en nginx-externa"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # secrets.NGINX_HOST es la IP de nginx-externa
+          host: ${{ secrets.NGINX_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           timeout: 60s
           script: |
-            # 1. Login y actualización de imagen
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-            docker pull ghcr.io/${{ github.repository }}:latest
-            
-            # 2. Reinicio del contenedor (Tu lógica original)
-            docker stop fast-api-dev || true
-            docker rm fast-api-dev || true
-            docker run -d --name fast-api-dev -p 8080:3000 --restart always ghcr.io/${{ github.repository }}:latest
-            
-            # 3. Lógica de Orquestación Blue-Green (Actividad 3)
-            # Este script maneja la persistencia y el cambio de tráfico en NG
-            /home/g2023171060/pipeline_deploy.sh
+            ~/switch_nginx.sh
