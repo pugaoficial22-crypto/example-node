@@ -67,7 +67,7 @@ router.get('/', function(req, res, next) {
 </head>
 <body>
   <div class="card">
-    <h1>🚀 Fast API Dev - v2.0</h1>
+    <h1>🚀 Fast API Dev - v3.0</h1>
     <p>Pipeline CI/CD con GitHub Actions</p>
     <p style="color:#64748b; font-size:0.85rem;">UTEQ — DevOps 2026</p>
     
