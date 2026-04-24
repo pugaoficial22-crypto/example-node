@@ -69,18 +69,18 @@ router.get('/', function(req, res, next) {
   <div class="card">
     <h1>🚀 Fast API Dev - v4.0</h1>
     <p>Pipeline CI/CD con GitHub Actions</p>
-    <p style="color:#64748b; font-size:0.85rem;">UTEQ — DevOps 2026</p>
+    <p style="color:#64748b; font-size:0.85rem;">UTEQ — DevOps 2026 - Diego Ivan Prieto Puga</p>
     
     <div class="endpoints">
-      <a class="btn" href="/health">🟢 Health</a>
-      <a class="btn" href="/items">📦 Items</a>
-      <a class="btn" href="/metrics">📊 Metrics</a>
+      <a class="btn" href="/health">Health</a>
+      <a class="btn" href="/items">Items</a>
+      <a class="btn" href="/metrics">Metrics</a>
     </div>
 
     <div class="endpoints" style="margin-top: 10px;">
       <p style="width: 100%; font-size: 0.8rem; margin-bottom: 5px;">Observabilidad:</p>
-      <a class="btn btn-monitoring" href="http://${req.hostname}:9090" target="_blank">🔥 Prometheus</a>
-      <a class="btn btn-monitoring" href="http://${req.hostname}:3000" target="_blank">📈 Grafana</a>
+      <a class="btn btn-monitoring" href="http://${req.hostname}:9090" target="_blank">Prometheus</a>
+      <a class="btn btn-monitoring" href="http://${req.hostname}:3000" target="_blank">Grafana</a>
     </div>
   </div>
 
