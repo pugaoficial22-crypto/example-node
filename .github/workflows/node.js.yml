@@ -378,3 +378,4 @@ jobs:
             echo "  Activo : fast-api-dev-$NEXT"
             echo "  Bajo   : fast-api-dev-$OLD"
             echo "================================"
+            
